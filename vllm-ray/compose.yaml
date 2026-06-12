@@ -1,0 +1,108 @@
+services:
+  vllm-head:
+    profiles:
+      - head
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODEL_NAME: ${MODEL_NAME:-gemma4}
+        BASE_IMAGE: ${BASE_IMAGE:-vllm/vllm-openai}
+        BASE_IMAGE_TAG: ${BASE_IMAGE_TAG:-latest}
+    container_name: vllm-ray-head
+    network_mode: host
+    ipc: host
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    cap_add:
+      - IPC_LOCK
+    shm_size: 10.24g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      stack: 67108864
+    environment:
+      GLOO_SOCKET_IFNAME: enp1s0f0np0  
+      NCCL_SOCKET_IFNAME: enp1s0f0np0
+      UCX_NET_DEVICES: enp1s0f0np0
+      OMPI_MCA_btl_tcp_if_include: enp1s0f0np0
+      TP_SOCKET_IFNAME: enp1s0f0np0
+      NCCL_IB_HCA: rocep1s0f0,roceP2p1s0f0    # both halves for full 200 Gb/s
+      NCCL_IB_DISABLE: 0
+      NCCL_IGNORE_CPU_AFFINITY: 1
+      TORCH_DISTRIBUTED_DEBUG: INFO
+      NCCL_DEBUG: INFO
+      NCCL_ASYNC_ERROR_HANDLING: 1
+      #PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True,max_split_size_mb:256"
+      # --- FORCE RAY TO IGNORE UNIFIED MEMORY DEPLETION ---
+      RAY_memory_monitor_refresh_ms: "0"
+      RAY_memory_usage_threshold: "0.99"
+      RAY_custom_oom_killer_enabled: "0"
+      VLLM_RPC_TIMEOUT: 300000
+      VLLM_ENGINE_ITERATION_TIMEOUT_S: 300
+    volumes:
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+      - /dev/shm:/dev/shm
+    devices:
+      - /dev/infiniband:/dev/infiniband
+    entrypoint: ["/entrypoint.sh", "${MODEL_NAME:-gemma4}", "1"]
+
+  vllm-worker:
+    profiles:
+      - worker
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MODEL_NAME: ${MODEL_NAME:-gemma4}
+        BASE_IMAGE: ${BASE_IMAGE:-vllm/vllm-openai}
+        BASE_IMAGE_TAG: ${BASE_IMAGE_TAG:-latest}
+    container_name: vllm-ray-worker
+    network_mode: host
+    ipc: host
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    cap_add:
+      - IPC_LOCK
+    shm_size: 10.24g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      stack: 67108864
+    environment:
+      RAY_TASK_MAX_RETRIES: -1
+      GLOO_SOCKET_IFNAME: enp1s0f0np0  
+      NCCL_SOCKET_IFNAME: enp1s0f0np0
+      UCX_NET_DEVICES: enp1s0f0np0
+      OMPI_MCA_btl_tcp_if_include: enp1s0f0np0
+      TP_SOCKET_IFNAME: enp1s0f0np0
+      NCCL_IB_HCA: rocep1s0f0,roceP2p1s0f0    # both halves for full 200 Gb/s
+      NCCL_IB_DISABLE: 0
+      NCCL_IB_MERGE_NICS: 1
+      NCCL_IGNORE_CPU_AFFINITY: 1
+      NCCL_ASYNC_ERROR_HANDLING: 1
+      # --- FORCE RAY TO IGNORE UNIFIED MEMORY DEPLETION ---
+      RAY_memory_monitor_refresh_ms: "0"
+      RAY_memory_usage_threshold: "0.99"
+      RAY_custom_oom_killer_enabled: "0"
+    volumes:
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+      - /dev/shm:/dev/shm
+    devices:
+      - /dev/infiniband:/dev/infiniband
+    entrypoint: ["/entrypoint.sh", "${MODEL_NAME:-gemma4}", "2"]
+    #entrypoint: /bin/bash
+    #command: -c 'ray start --block --address=192.168.1.10:6379 --node-ip-address=192.168.1.11 --object-store-memory=2147483648'
+

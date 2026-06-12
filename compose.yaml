@@ -1,0 +1,275 @@
+#
+# Models
+# - google/gemma-4-E4B-it
+# - google/gemma-4-26B-A4B-it
+# - google/gemma-4-31B-it
+# - nvidia/Gemma-4-31B-IT-NVFP4
+#
+# NVFP4
+# --quantization modelopt_fp4
+# 
+# MTP Config (Only use it on the dense model, not MoE)
+# --speculative-config '{"model": "google/gemma-4-31B-it-assistant", "num_speculative_tokens": 4}'
+
+services:
+  vllm-gemma4:
+    profiles:
+      - gemma4
+    #image: vllm/vllm-openai:v0.19.1
+    image: vllm/vllm-openai:latest
+    #build:
+    #  context: ./vllm-gemma4
+    #  dockerfile: Dockerfile
+    container_name: vllm-gemma4
+    network_mode: host
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    volumes:
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+      #- ${HOME}/gb10/vllm_cache/vllm_gemma4:/root/.cache/vllm
+    command: >
+      google/gemma-4-26B-A4B-it
+      --tensor-parallel-size 1
+      --port 8090
+      --max-model-len 262144 
+      --gpu-memory-utilization 0.90
+      --trust-remote-code
+      --enable-prefix-caching
+      --kv-cache-dtype fp8
+      --reasoning-parser gemma4
+      --tool-call-parser gemma4
+      --enable-auto-tool-choice
+      --enable-chunked-prefill
+      --max-num-batched-tokens 8192
+      --compilation-config '{"cache_dir": "/root/.cache/vllm"}'
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+
+  #--compilation-config '{"cudagraph_mode": "FULL_AND_PIECEWISE", "max_cudagraph_capture_size": 64, "mode": "VLLM_COMPILE"}'
+  vllm-gemma4-nvfp4:
+    profiles:
+      - gemma4-nvfp4
+    image: vllm/vllm-openai:v0.22.1
+    container_name: vllm-gemma4-nvfp4
+    network_mode: host
+    ipc: host
+    environment:
+      - VLLM_NVFP4_GEMM_BACKEND=marlin
+      - VLLM_ATTENTION_BACKEND=FLASHINFER
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    volumes:
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+      #- ./gemma4_patched.py:/usr/local/lib/python3.12/dist-packages/vllm/model_executor/models/gemma4.py
+    command: >
+      bg-digitalservices/Gemma-4-26B-A4B-it-NVFP4
+      --port 8090
+      --quantization modelopt
+      --kv-cache-dtype fp8
+      --gpu-memory-utilization 0.25
+      --max-model-len 131072
+      --max-num-seqs 4
+      --max-num-batched-tokens 16384
+      --moe-backend marlin
+      --enable-auto-tool-choice
+      --enable-prefix-caching
+      --enable-chunked-prefill
+      --tool-call-parser gemma4
+      --reasoning-parser gemma4
+      --load-format fastsafetensors
+      --trust-remote-code
+      --default-chat-template-kwargs '{"enable_thinking": true}'
+      --mm-processor-kwargs '{"max_soft_tokens":1120}'
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+
+  vllm-qwen36-26b:
+    profiles:
+      - qwen36-26b
+    #image: vllm/vllm-openai:v0.19.1
+    image: vllm/vllm-openai:v0.22.1
+    #build:
+    #  context: ./vllm-gemma4
+    #  dockerfile: Dockerfile
+    container_name: vllm-qwen36-26b
+    network_mode: host
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    volumes:
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+      #- ${HOME}/gb10/vllm_cache/vllm_qwen36_26b:/root/.cache/vllm
+    command: >
+      Qwen/Qwen3.6-27B 
+      --port 8090
+      --trust-remote-code 
+      --tensor-parallel-size 1 
+      --gpu-memory-utilization 0.7
+      --max-model-len 131072 
+      --kv-cache-dtype fp8
+      --enable-auto-tool-choice 
+      --enable-prefix-caching
+      --tool-call-parser qwen3_coder 
+      --reasoning-parser qwen3 
+      --mm-encoder-tp-mode data 
+      --max-num-batched-tokens 16384
+      --async-scheduling 
+      --max-num-seqs 6
+      --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+  vllm-qwen35-122b:
+    profiles:
+      - qwen35-122b
+    image: vllm/vllm-openai:v0.22.1
+    container_name: vllm-qwen35-122b
+    network_mode: host
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    environment:
+      - VLLM_MARLIN_USE_ATOMIC_ADD=1
+    volumes:
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+      - ./mods/qwen3.5-enhanced.jinja:/mods/qwen3.5-enhanced.jinja
+    command: >
+      Intel/Qwen3.5-122B-A10B-int4-AutoRound
+      --max-model-len 196608
+      --gpu-memory-utilization 0.76
+      --max-num-batched-tokens 16384
+      --max-num-seqs 16
+      --dtype bfloat16
+      --kv-cache-dtype fp8_e4m3
+      --port 8090
+      --host 0.0.0.0
+      --enable-prefix-caching
+      --enable-chunked-prefill
+      --speculative-config '{"method": "mtp", "num_speculative_tokens": 3}'
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --chat-template /mods/qwen3.5-enhanced.jinja
+      --reasoning-parser qwen3
+      --generation-config auto
+      --override-generation-config '{"temperature": 0.7,  "top_p": 0.8, "top_k": 20, "presence_penalty": 0.0, "repetition_penalty": 1.0}'
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+
+  # --chat-template /mods/qwen3.5-enhanced.jinja
+  vllm-qwen35-122b-nvfp4:
+    profiles:
+      - qwen35-122b-nvfp4
+    image: vllm/vllm-openai:v0.22.1
+    container_name: vllm-qwen35-122b-nvfp4
+    network_mode: host
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    volumes:
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+      #- ./mods/qwen3.5-enhanced.jinja:/mods/qwen3.5-enhanced.jinja
+    command: >
+      nvidia/Qwen3.5-122B-A10B-NVFP4
+      --trust-remote-code
+      --quantization modelopt_fp4
+      --kv-cache-dtype fp8
+      --tensor-parallel-size 1
+      --reasoning-parser qwen3
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --port 8090
+      --host 0.0.0.0
+      --enable-prefix-caching
+      --enable-chunked-prefill
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+
+  vllm-cohere-north-mini-code:
+    profiles:
+      - cohere-north-mini-code
+    image: vllm/vllm-openai:latest
+    container_name: vllm-cohere-north-mini-code
+    network_mode: host
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    volumes:
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+    command: >
+      CohereLabs/North-Mini-Code-1.0
+      --tensor-parallel-size 2
+      --port 8090
+      --gpu-memory-utilization 0.6
+      --max-model-len 320000
+      --tool-call-parser cohere_command4
+      --reasoning-parser cohere_command4
+      --enable-auto-tool-choice
+      --trust-remote-code
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
