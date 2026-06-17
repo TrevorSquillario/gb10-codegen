@@ -9,6 +9,7 @@ services:
         MODEL_NAME: ${MODEL_NAME:-gemma4}
         BASE_IMAGE: ${BASE_IMAGE:-vllm/vllm-openai}
         BASE_IMAGE_TAG: ${BASE_IMAGE_TAG:-latest}
+    image: vllm-ray-head:${BASE_IMAGE_TAG:-latest}
     container_name: vllm-ray-head
     network_mode: host
     ipc: host
@@ -63,6 +64,7 @@ services:
         MODEL_NAME: ${MODEL_NAME:-gemma4}
         BASE_IMAGE: ${BASE_IMAGE:-vllm/vllm-openai}
         BASE_IMAGE_TAG: ${BASE_IMAGE_TAG:-latest}
+    image: vllm-ray-worker:${BASE_IMAGE_TAG:-latest}
     container_name: vllm-ray-worker
     network_mode: host
     ipc: host

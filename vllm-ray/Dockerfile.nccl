@@ -1,0 +1,53 @@
+# Dockerfile.vllm
+# allow passing model name and image name at build-time
+ARG MODEL_NAME=gemma4
+ARG BASE_IMAGE=vllm/vllm-openai
+ARG BASE_IMAGE_TAG=latest
+FROM vllm/vllm-openai:${BASE_IMAGE_TAG}
+
+# expose MODEL_NAME and IMAGE_NAME to the container runtime
+ENV MODEL_NAME=${MODEL_NAME}
+ENV BASE_IMAGE=${BASE_IMAGE}
+ENV BASE_IMAGE_TAG=${BASE_IMAGE_TAG}
+#FROM vllm/vllm-openai:v0.22.0
+
+# Upgrade transformers to a recent compatible version
+RUN pip install --no-cache-dir --upgrade "transformers>=5.5.0"
+
+# Install Ray for distributed computing
+RUN pip install --no-cache-dir "ray[default]"
+
+# Switch to root to perform package installation
+USER root
+
+# Install prerequisites for adding the NVIDIA repository
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    gnupg2 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Add NVIDIA CUDA network repository for Ubuntu 22.04 (aarch64)
+# Adjust the distribution string if the vLLM base uses a different OS version
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/arm64/cuda-keyring_1.1-1_all.deb \
+    && dpkg -i cuda-keyring_1.1-1_all.deb \
+    && rm cuda-keyring_1.1-1_all.deb
+
+# Pin and install the exact critical NCCL version requested
+#RUN apt-get update && apt-get install -y --no-install-recommends \
+#    libnccl2=2.30.4-1+cuda13.2 \
+#    libnccl-dev=2.30.4-1+cuda13.2 \
+#    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone -b v2.30u1 https://github.com/NVIDIA/nccl.git && \
+    cd nccl && make -j 16 src.build NVCC_GENCODE="-gencode=arch=compute_121,code=sm_121" && \
+    make pkg.debian.build && apt install -y --no-install-recommends --allow-downgrades --allow-change-held-packages ./build/pkg/deb/*.deb
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Drop back to the default vLLM user if the base image uses one (optional but recommended)
+USER vllm
+
+# Set the environment variable globally within the image to guarantee it loads
+ENV LD_PRELOAD=/usr/lib/aarch64-linux-gnu/libnccl.so.2.30.4

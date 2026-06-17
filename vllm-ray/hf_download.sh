@@ -121,6 +121,11 @@ START_TIME=$(date +%s)
 # Download model
 echo "Downloading model '$MODEL_NAME' using uvx..."
 DOWNLOAD_START=$(date +%s)
+
+# --- THROTTLE HUGGINGFACE CONCURRENCY HERE ---
+export HF_HUB_ENABLE_HF_TRANSFER=0  # Disables the hyper-aggressive Rust transfer engine
+export CONCURRENT_DOWNLOADS=2       # Limits parallel chunk downloads to 2 streams
+
 if uvx hf download "$MODEL_NAME"; then
     DOWNLOAD_END=$(date +%s)
     DOWNLOAD_TIME=$((DOWNLOAD_END - DOWNLOAD_START))

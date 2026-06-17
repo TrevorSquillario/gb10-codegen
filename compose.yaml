@@ -239,10 +239,14 @@ services:
             - driver: nvidia
               capabilities: [gpu]
 
+  # Not working as of v0.23.0
   vllm-cohere-north-mini-code:
     profiles:
       - cohere-north-mini-code
-    image: vllm/vllm-openai:latest
+    build:
+      context: ./vllm-cohere-mini
+      dockerfile: Dockerfile
+    #image: vllm/vllm-openai:latest
     container_name: vllm-cohere-north-mini-code
     network_mode: host
     ipc: host
@@ -253,14 +257,15 @@ services:
       - ${HOME}/.cache/huggingface:/root/.cache/huggingface
     command: >
       CohereLabs/North-Mini-Code-1.0
-      --tensor-parallel-size 2
+      --tensor-parallel-size 1
       --port 8090
-      --gpu-memory-utilization 0.6
-      --max-model-len 320000
+      --gpu-memory-utilization 0.85
+      --max-model-len 131072
       --tool-call-parser cohere_command4
       --reasoning-parser cohere_command4
       --enable-auto-tool-choice
       --trust-remote-code
+      --moe-backend triton
     restart: "no"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8090/health"]

@@ -31,9 +31,15 @@ ssh "$REMOTE_IP" "sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'"
 
 echo "Building worker image locally with MODEL_NAME=$MODEL_NAME and BASE_IMAGE_TAG=$BASE_IMAGE_TAG..."
 # Build the worker image locally and tag it explicitly so we can save/load
-docker compose --profile worker build --build-arg MODEL_NAME="$MODEL_NAME" --build-arg BASE_IMAGE_TAG="$BASE_IMAGE_TAG"
+#docker compose --profile worker build --build-arg MODEL_NAME="$MODEL_NAME" --build-arg BASE_IMAGE_TAG="$BASE_IMAGE_TAG"
 
-IMAGE_NAME="vllm-ray-vllm-worker:latest"
+docker build \
+  --build-arg MODEL_NAME="$MODEL_NAME" \
+  --build-arg BASE_IMAGE_TAG="$BASE_IMAGE_TAG" \
+  -t "vllm-ray-worker:${BASE_IMAGE_TAG:-latest}" \
+  .
+
+IMAGE_NAME="vllm-ray-worker:${BASE_IMAGE_TAG:-latest}"
 
 echo "Checking if $IMAGE_NAME exists on remote host $REMOTE_IP..."
 skip_transfer=false
@@ -42,7 +48,7 @@ if ssh "$REMOTE_IP" "docker image inspect '$IMAGE_NAME' > /dev/null 2>&1"; then
         echo "Remote already has $IMAGE_NAME but -f specified; will overwrite."
     else
         echo "Remote already has $IMAGE_NAME. Skipping save/copy/load and starting remote worker services."
-        ssh "$REMOTE_IP" "cd ~/vllm-ray && docker compose --profile worker up -d --no-build"
+        ssh "$REMOTE_IP" "cd ~/vllm-ray && docker rm -f vllm-ray-worker 2>/dev/null || true && env BASE_IMAGE_TAG=${BASE_IMAGE_TAG:-latest} docker compose --profile worker up -d --no-build"
         skip_transfer=true
     fi
 fi
@@ -55,7 +61,7 @@ if [ "$skip_transfer" = false ]; then
     scp worker_image.tar "$REMOTE_IP":~/vllm-ray/worker_image.tar
 
     echo "Loading worker image on remote host and starting services..."
-    ssh "$REMOTE_IP" "cd ~/vllm-ray && sudo docker load -i worker_image.tar && rm -f worker_image.tar && docker compose --profile worker up -d --no-build"
+    ssh "$REMOTE_IP" "cd ~/vllm-ray && sudo docker load -i worker_image.tar && rm -f worker_image.tar && BASE_IMAGE_TAG=${BASE_IMAGE_TAG:-latest} docker compose --profile worker up -d --no-build"
 
     echo "Cleaning up local image tar..."
     rm -f worker_image.tar
@@ -66,6 +72,6 @@ echo "Starting local head with model: $MODEL_NAME..."
 export MODEL_NAME="$MODEL_NAME"
 echo "Dropping caches on local host..."
 sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
-docker compose --profile head build --build-arg MODEL_NAME="$MODEL_NAME" --build-arg BASE_IMAGE_TAG="$BASE_IMAGE_TAG"
-docker compose --profile head up
+env BASE_IMAGE_TAG=${BASE_IMAGE_TAG:-latest} docker compose --profile head build --build-arg MODEL_NAME="$MODEL_NAME" --build-arg BASE_IMAGE_TAG="$BASE_IMAGE_TAG"
+env BASE_IMAGE_TAG=${BASE_IMAGE_TAG:-latest} docker compose --profile head up
 
