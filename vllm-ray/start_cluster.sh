@@ -18,7 +18,10 @@ fi
 REMOTE_IP="$1"
 MODEL_NAME="$2"
 BASE_IMAGE_TAG="$3"
-BASE_IMAGE="vllm/vllm-openai:${BASE_IMAGE_TAG:-latest}"
+BASE_IMAGE="$4"
+if [ -z "$BASE_IMAGE" ]; then
+    BASE_IMAGE="vllm/vllm-openai:${BASE_IMAGE_TAG:-latest}"
+fi
 
 # Start remote workers
 echo "Starting remote workers on $REMOTE_IP..."

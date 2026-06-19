@@ -105,6 +105,4 @@ services:
     devices:
       - /dev/infiniband:/dev/infiniband
     entrypoint: ["/entrypoint.sh", "${MODEL_NAME:-gemma4}", "2"]
-    #entrypoint: /bin/bash
-    #command: -c 'ray start --block --address=192.168.1.10:6379 --node-ip-address=192.168.1.11 --object-store-memory=2147483648'
 

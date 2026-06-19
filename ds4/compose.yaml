@@ -1,0 +1,28 @@
+services:
+  ds4:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ds4
+    network_mode: host
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    volumes:
+      - ~/gb10/ds4:/app/gguf
+    restart: unless-stopped
+    command: >
+      --host 0.0.0.0 
+      --port 8000
+      -m /app/gguf/DeepSeek-V4-Flash-IQ2XXS-w2Q2K-AProjQ8-SExpQ8-OutQ8-chat-v2-imatrix.gguf 
+      -c 131072
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+volumes:
+  ds4-models:
+  ds4-data:

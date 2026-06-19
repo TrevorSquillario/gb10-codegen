@@ -13,10 +13,10 @@ shift 2 || true
 # Start Ray: head if NODE_RANK == 1, otherwise start as worker
 if [ "$NODE_RANK" = "1" ]; then
     echo "Starting Ray on head node (NODE_RANK=1)"
-    ray start --block --head --node-ip-address=192.168.10.10 --object-store-memory=2147483648 --port=6379 --dashboard-host=0.0.0.0 --dashboard-port=8265 --metrics-export-port=8080 &
+    ray start --block --head --node-ip-address=192.168.10.10 --object-store-memory=2147483648 --port=63790 --dashboard-host=0.0.0.0 --dashboard-port=8265 --metrics-export-port=8080 &
 else
     echo "Starting Ray on worker node (NODE_RANK=$NODE_RANK)"
-    ray start --block --address=192.168.10.10:6379 --node-ip-address=192.168.10.11 --object-store-memory=2147483648
+    ray start --block --address=192.168.10.10:63790 --node-ip-address=192.168.10.11 --object-store-memory=2147483648
 fi
 
 sleep 5  # Wait for Ray to start
@@ -261,10 +261,13 @@ case "$PROFILE" in
         ;;
 
     deepseek-ai/DeepSeek-V4-Flash)
-        # ./start_cluster.sh 192.168.10.11 deepseek-ai/DeepSeek-V4-Flash aidendle94/sparkrun-vllm-ds4-gb10 production-ready
+        # ./start_cluster.sh 192.168.10.11 deepseek-ai/DeepSeek-V4-Flash production-ready aidendle94/sparkrun-vllm-ds4-gb10 
+        # ./start_cluster.sh 192.168.10.11 deepseek-ai/DeepSeek-V4-Flash deepseekv4-cu130
+        
+        # Settings to test:
+        #    --speculative-config '{"method":"mtp","num_speculative_tokens":2}'
         MODEL="deepseek-ai/DeepSeek-V4-Flash"
         ARGS=(
-            --served-model-name deepseek-v4-flash
             --port "$PORT"
             --host "$HOST"
             --tensor-parallel-size 2
@@ -276,16 +279,20 @@ case "$PROFILE" in
             --max-num-batched-tokens 8192
             --gpu-memory-utilization 0.82
             --enable-prefix-caching
-            --speculative-config '{"method":"mtp","num_speculative_tokens":2}'
             --tokenizer-mode deepseek_v4
             --distributed-executor-backend ray
             --tool-call-parser deepseek_v4
             --enable-auto-tool-choice
             --reasoning-parser deepseek_v4
-            --reasoning-config '{"reasoning_parser":"deepseek_v4","reasoning_start_str":"","reasoning_end_str":""}'
             --default-chat-template-kwargs.thinking=true
             --default-chat-template-kwargs.reasoning_effort=high
             --enable-flashinfer-autotune
+            --trust-remote-code 
+            --block-size 256 
+            --enable-expert-parallel 
+            --data-parallel-size 4 
+            --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE", "custom_ops":["all"]}' 
+            --attention_config.use_fp4_indexer_cache=True 
         )
 
         export VLLM_ALLOW_LONG_MAX_MODEL_LEN="1"
